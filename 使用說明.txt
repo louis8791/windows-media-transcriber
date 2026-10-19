@@ -1,0 +1,26 @@
+廣播轉文字 使用說明
+
+1. 把音檔或影片放到桌面「廣播音檔」。
+2. 雙擊桌面「開始轉錄」。
+3. 黑色視窗開著時，系統會自動偵測新檔案。
+4. 檔案大小連續 3 分鐘不變後，才會開始轉換，避免檔案還沒複製完。
+5. 等待轉檔與辨識完成。
+6. 到桌面「廣播文字檔」拿結果；預設只會放一個「檔名.txt」，用記事本就能直接開；多支影片會先各自顯示排隊順位。
+7. 這個「檔名.txt」帶有時間碼，內容跟正式 srt 字幕檔一模一樣（連編號、00:00:00,000 --> 00:00:00,000 這種時間行都一樣），只是副檔名換成 txt 方便直接開。它已經過 OpenCC s2tw，統一為臺灣正體中文。
+7-1. 注意：不帶時間碼的純文字稿叫「檔名.純文字.txt」，不會跟「檔名.txt」搞混，兩者不會互相冒充。需要純文字稿、srt、cleaned.txt 或審查報告時，請管理者在 config.local.json 的 desktop_outputs 加入 txt、srt、cleaned、review；完整檔案本來就一直保存在 E:\media-transcriber\output_final。
+8. 內容完全相同但檔名不同的影片只辨識一次，每個檔名仍會各自取得結果。
+9. 如果本機 Qwen 校稿成功，output_final 會有「檔名.cleaned.txt」。校稿失敗時不會產生假檔，但 txt / srt 仍會保留。
+10. 如果機器審查發現疑似重複幻聽、YouTube 樣板幻覺（例如「請不吝點贊 訂閱」）或異常過長的字幕，桌面一定會多出「檔名.審查報告.txt」，代表內容需要人工對照原音。報告最後另會列出「長時間無字幕」與「疑似英文發言」兩份清單，只是提醒抽查，不代表有錯。
+10-1. 如果某一段（例如外賓的英文致辭）明顯轉錯，可以請管理者用區段修補工具只重轉那一段，不必整支影片重來：
+     powershell -NoProfile -ExecutionPolicy Bypass -File E:\media-transcriber\scripts\retranscribe_range.ps1 -Base "檔名" -Start 00:18:06 -End 00:21:13 -Language en
+     先這樣跑會只顯示預覽、不改任何檔案；確認沒問題後再加 -Apply 實際修補。
+     修補前的原始 srt 會自動備份到 E:\media-transcriber\output_final\repair_backup。
+     如果修補後有整句發言消失（多半是講者音量較小被當成雜音濾掉），請管理者加上 -VadThreshold 0.30 再跑一次；這個值預設 0.50，可填 0.05 到 0.95，數字越小越不會把小聲的話當成雜音。
+     時間不必抓得剛剛好：工具會自動把處理範圍往外對齊到跨越頭尾的整句字幕，畫面會同時顯示「你要求的範圍」與「向外對齊後的實際範圍」，避免頭尾的話被切成半句而消失或重複。
+     如果只是想刪掉一兩條很短的垃圾字幕（例如 0.27 秒的「請不吝點贊 訂閱」），不值得重轉，就加上 -DeleteOnly：
+     powershell -NoProfile -ExecutionPolicy Bypass -File E:\media-transcriber\scripts\retranscribe_range.ps1 -Base "檔名" -Start 01:14:59.090 -End 01:14:59.360 -DeleteOnly
+     這個模式只刪除、不重新辨識，也不會往外對齊（避免多刪到旁邊的正常字幕）；一樣先看預覽確認只刪到該刪的那幾條，再加 -Apply。
+     注意：這個工具只修 srt，不會同步 txt。
+11. 如果失敗，請把 E:\media-transcriber\logs 裡最新的 run log 與 logs\status 裡對應 JSON 傳給管理者。
+
+提醒：視窗關閉後就會停止自動偵測；AI 逐字稿仍須由人確認內容。

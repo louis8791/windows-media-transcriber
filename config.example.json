@@ -1,0 +1,23 @@
+{
+  "project_root": "E:\\media-transcriber",
+  "workspace_dir": "E:\\media-transcriber",
+  "desktop_input_dir": "C:\\Users\\YOUR_USER\\OneDrive\\Desktop\\音檔",
+  "desktop_output_dir": "C:\\Users\\YOUR_USER\\OneDrive\\Desktop\\文字檔",
+  "desktop_outputs": ["timeline"],
+  "model_path": "E:\\media-transcriber\\models\\ggml-large-v3.bin",
+  "vad_model_path": "E:\\media-transcriber\\models\\ggml-silero-v6.2.0.bin",
+  "language": "zh",
+  "whisper_chunk_seconds": 300,
+  "process_timeout_seconds": 7200,
+  "process_idle_seconds": 900,
+  "max_attempts": 3,
+  "retry_backoff_seconds": 30,
+  "disk_reserve_mb": 256,
+  "use_ollama_cleanup": "auto",
+  "ollama_model": "qwen3:30b",
+  "ollama_api_url": "http://127.0.0.1:11434/api/generate",
+  "ollama_models_dir": "E:\\media-transcriber\\models\\ollama",
+  "whisper_cli_path": "E:\\media-transcriber\\tools\\whisper.cpp\\build-vs\\bin\\Release\\whisper-cli.exe",
+  "ffmpeg_path": "E:\\media-transcriber\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+  "ollama_path": "C:\\Users\\YOUR_USER\\AppData\\Local\\Programs\\Ollama\\ollama.exe"
+}

@@ -1,0 +1,33 @@
+# Local runtime and downloaded dependencies
+.venv/
+models/*
+!models/README.md
+tools/
+config.local.json
+
+# User media, generated output, logs, and scratch data
+input_audio/*
+!input_audio/.gitkeep
+input_tsp/*
+!input_tsp/.gitkeep
+work_wav/*
+!work_wav/.gitkeep
+whisper_raw/*
+!whisper_raw/.gitkeep
+review_draft/*
+!review_draft/.gitkeep
+output_final/*
+!output_final/.gitkeep
+logs/*
+!logs/.gitkeep
+scratch/
+test_artifacts/*
+!test_artifacts/.gitkeep
+work/
+
+# Python and editor noise
+__pycache__/
+*.py[cod]
+*.partial
+.DS_Store
+Thumbs.db

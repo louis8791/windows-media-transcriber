@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-08-17",
+  "models": [
+    {
+      "role": "speech_to_text",
+      "name": "ggml-large-v3.bin",
+      "runtime": "whisper.cpp 1.9.0",
+      "runtime_commit": "86c40c3bd6fc86f1187fb751d111b49e0fc18e84",
+      "local_path": "models/ggml-large-v3.bin",
+      "bytes": 3095033483,
+      "sha256": "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+      "source": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin"
+    },
+    {
+      "role": "voice_activity_detection",
+      "name": "ggml-silero-v6.2.0.bin",
+      "runtime": "whisper.cpp 1.9.0",
+      "local_path": "models/ggml-silero-v6.2.0.bin",
+      "bytes": 885098,
+      "sha256": "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987",
+      "source": "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin",
+      "required": true
+    },
+    {
+      "role": "transcript_cleanup",
+      "name": "qwen3:8b",
+      "runtime": "Ollama 0.32.11",
+      "verified_at": "2026-09-23",
+      "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+      "local_path": "models/ollama",
+      "source": "Ollama registry",
+      "required": false
+    },
+    {
+      "role": "traditional_chinese_conversion",
+      "name": "OpenCC s2tw",
+      "runtime": "opencc-python-reimplemented 0.1.7",
+      "source": "PyPI",
+      "required": true
+    }
+  ]
+}

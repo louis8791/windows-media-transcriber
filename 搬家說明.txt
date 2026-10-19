@@ -1,0 +1,10 @@
+搬家到另一台電腦
+
+1. 把整個「E:\media-transcriber」資料夾複製到另一台電腦的 E 槽。
+2. 在另一台電腦打開 E:\media-transcriber。
+3. 雙擊「安裝到這台電腦.bat」。
+4. 看到 RESULT: PASS 後，就可以使用桌面「開始轉錄.bat」。
+5. 使用方式：把影片或音檔放到桌面「廣播音檔」，雙擊「開始轉錄.bat」，完成後到「廣播文字檔」拿「檔名.txt」。桌面預設（desktop_outputs = ["timeline"]）只交付這個檔，內容是正式 srt 的逐位元複製、含時間碼，記事本可直接開。不含時間碼的純文字稿叫「檔名.純文字.txt」，兩者不得互相冒充；需要純文字稿、srt、cleaned.txt 或審查報告，請在 config.local.json 的 desktop_outputs 加入 txt、srt、cleaned、review，完整檔案本來就保存在 E:\media-transcriber\output_final。
+6. 如果失敗，把 E:\media-transcriber\logs 裡最新的 install_on_this_pc log 傳給管理者。
+
+提醒：不要只複製桌面捷徑；要複製整個 E:\media-transcriber，裡面有本機模型和程式。模型與媒體不會放進 GitHub。
