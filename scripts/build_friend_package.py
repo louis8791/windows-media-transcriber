@@ -55,15 +55,11 @@ def build():
         name=blob['digest'].replace(':','-');source=ROOT/'models/ollama/blobs'/name
         assert sha(source)==blob['digest'].split(':')[1];copy(source,system/'models/ollama/blobs'/name)
         if blob.get('mediaType','').endswith('.license'):copy(source,system/'licenses/Qwen3-8B-LICENSE.txt')
-    for source,name in [(ROOT/'tools/whisper.cpp/LICENSE','Whisper-LICENSE.txt'),(ROOT/'work/downloads/Ollama-LICENSE.txt','Ollama-LICENSE.txt'),
+    for source,name in [(ROOT/'tools/whisper.cpp/LICENSE','Whisper-LICENSE.txt'),(ROOT/'packaging/licenses/Ollama-LICENSE.txt','Ollama-LICENSE.txt'),
                         (ROOT/'tools/ffmpeg/LICENSE','FFmpeg-LICENSE.txt')]:
         if source.is_file():copy(source,system/'licenses'/name)
     copy(base/'LICENSE.txt',system/'licenses/Python-Tcl-Tk-LICENSE.txt')
-    wheel=ROOT/'work/downloads/opencc_python_reimplemented-0.1.7-py2.py3-none-any.whl'
-    with zipfile.ZipFile(wheel) as archive:
-        for name in archive.namelist():
-            if 'LICENSE' in name.upper():
-                target=system/'licenses/OpenCC-LICENSE.txt';target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(archive.read(name));break
+    copy(ROOT/'packaging/licenses/OpenCC-LICENSE.txt',system/'licenses/OpenCC-LICENSE.txt')
     (system/'config').mkdir(exist_ok=True)
     (system/'config/model-manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
     files={p.relative_to(package).as_posix():sha(p) for p in package.rglob('*') if p.is_file()}

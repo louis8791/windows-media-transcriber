@@ -23,7 +23,8 @@ logs/*
 scratch/
 test_artifacts/*
 !test_artifacts/.gitkeep
-work/
+work/*
+!work/.gitkeep
 
 # Python and editor noise
 __pycache__/

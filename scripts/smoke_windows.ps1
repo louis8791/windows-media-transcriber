@@ -1,4 +1,4 @@
-param([int]$Seconds = 80)
+﻿param([int]$Seconds = 80)
 
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -11,7 +11,7 @@ if (-not $ffmpeg -or -not (Test-Path -LiteralPath $ffmpeg)) { throw '找不到�
 
 $exts = @('.mp3','.wav','.m4a','.mp4','.aac','.flac','.mov','.mkv','.avi','.wmv','.webm','.ogg','.wma','.ts','.mts','.m2ts','.3gp')
 $sources = @(Get-ChildItem -LiteralPath $config.desktop_input_dir -File | Where-Object { $exts -contains $_.Extension.ToLowerInvariant() } | Sort-Object Name)
-if ($sources.Count -eq 0) { throw '桌面「廣播音檔」沒有可用的真實媒體，無法做 fresh smoke case。' }
+if ($sources.Count -eq 0) { throw '桌面「音檔」沒有可用的真實媒體，無法做 fresh smoke case。' }
 
 $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 $caseRoot = Join-Path $ProjectRoot (Join-Path 'test_artifacts' ('smoke_' + $stamp))

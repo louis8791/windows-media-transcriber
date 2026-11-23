@@ -36,10 +36,12 @@ def main():
         assert result.returncode==0,(case/(name+'.log')).read_text(encoding='utf-8',errors='replace')[-3000:]
     launch('prepare','--prepare-only',timeout=180)
     prepared=json.loads((system/'config.local.json').read_text(encoding='utf-8'))
-    assert Path(prepared['desktop_input_dir'])==package/'音檔'
-    assert Path(prepared['desktop_output_dir'])==package/'文字檔'
+    record=system/'user_folders.json'
+    folders=json.loads(record.read_text(encoding='utf-8')) if record.is_file() else {'input_dir':str(package/'音檔'),'output_dir':str(package/'文字檔')}
+    input_dir,output_dir=Path(folders['input_dir']),Path(folders['output_dir'])
+    assert Path(prepared['desktop_input_dir'])==input_dir and Path(prepared['desktop_output_dir'])==output_dir
     fixture=ROOT/'test_artifacts/audio_review_20261013/opening.wav'
-    source=package/'音檔/朋友測試.wav'
+    source=input_dir/'朋友測試.wav'
     if not source.exists():
         subprocess.run([str(system/'tools/ffmpeg/ffmpeg.exe'),'-nostdin','-v','error','-n','-i',str(fixture),'-t','40','-c:a','pcm_s16le',str(source)],
             check=True,creationflags=subprocess.CREATE_NO_WINDOW,timeout=30)
@@ -47,16 +49,16 @@ def main():
         (case/'transcribe_memory_block.log').write_bytes((case/'transcribe.log').read_bytes())
     print('解壓包真Whisper兩段辨識與Qwen3 8B校稿。',flush=True)
     launch('transcribe','--once','--stable-minutes','0','--chunk-seconds','30','--language','en','--only-name','朋友測試.wav')
-    text=package/'文字檔/朋友測試.txt';srt=system/'output_final/朋友測試.srt';cleaned=package/'文字檔/朋友測試.cleaned.txt'
+    text=output_dir/'朋友測試.txt';srt=system/'output_final/朋友測試.srt';cleaned=output_dir/'朋友測試.cleaned.txt'
     assert text.read_bytes()==srt.read_bytes();assert cleaned.is_file() and cleaned.stat().st_size
-    assert not list((package/'文字檔').glob('*轉錄中*'))
+    assert not list(output_dir.glob('*轉錄中*'))
     checkpoints=list((system/'work/transcribe').glob('*/*/chunks/chunk_*.complete'));assert len(checkpoints)==2
     before={str(p):p.stat().st_mtime_ns for p in checkpoints}
     launch('skip','--once','--stable-minutes','0','--language','en','--only-name','朋友測試.wav')
     assert all(Path(p).stat().st_mtime_ns==mtime for p,mtime in before.items())
     report=dict(zip=str(args.zip.resolve()),zip_sha256=sha(args.zip),zip_bytes=args.zip.stat().st_size,extracted=str(package),
         seeded_models_or_tools=False,sanitized_path=True,offline_prepare_passed=True,actual_two_chunk_asr=True,actual_qwen3_8b_cleanup=True,
-        timeline_equals_srt=True,completed_skip_preserves_checkpoints=True,powershell_executed=False,source_hashes=manifest['source_hashes'],
+        timeline_equals_srt=True,input_dir=str(input_dir),output_dir=str(output_dir),completed_skip_preserves_checkpoints=True,powershell_executed=False,source_hashes=manifest['source_hashes'],
         human_content_accepted=False,friend_clean_machine_tested=False)
     (case/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     (ROOT/'work/acceptance/friend_offline_latest.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')

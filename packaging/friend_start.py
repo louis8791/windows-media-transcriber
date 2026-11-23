@@ -1,5 +1,5 @@
 """Offline portable setup and native GUI; never calls PowerShell or global runtimes."""
-import argparse,hashlib,json,os,queue,socket,subprocess,sys,threading,time
+import argparse,contextlib,hashlib,json,os,queue,socket,subprocess,sys,threading,time
 from pathlib import Path
 import urllib.request,urllib.error
 
@@ -31,6 +31,15 @@ def environment():
         APPDATA=str(SYSTEM/'userhome/AppData/Roaming'),TEMP=str(SYSTEM/'temp'),TMP=str(SYSTEM/'temp'),
         PYTHONIOENCODING='utf-8',PYTHONDONTWRITEBYTECODE='1',NO_PROXY='127.0.0.1,localhost',no_proxy='127.0.0.1,localhost')
 
+def user_folders(system=None):
+    """Input/output folders: the installer's desktop folders if recorded, else inside the package."""
+    system=Path(system or SYSTEM);package=system.parent;record=system/'user_folders.json'
+    if not record.is_file():return package/'音檔',package/'文字檔'
+    data=json.loads(record.read_text(encoding='utf-8'))
+    folders=Path(data['input_dir']),Path(data['output_dir'])
+    if not all(folder.is_absolute() for folder in folders) or folders[0]==folders[1]:raise RuntimeError('安裝紀錄的音檔／文字檔位置無效，請重新安裝。')
+    return folders
+
 def prepare(args,say,services):
     from process_guard import OwnedProcess,run_guarded
     from merge_whisper_chunks import atomic_write_text
@@ -42,7 +51,8 @@ def prepare(args,say,services):
         if not path.is_relative_to(PACKAGE.resolve()):raise RuntimeError('包內清單路徑無效。')
         if path.stat().st_size>100*1024**2:say('核對包內環境：'+path.name)
         if digest(path)!=expected:raise RuntimeError('環境檔案缺少或指紋不符，請重新解壓：'+name)
-    for name in ('音檔','文字檔'):(PACKAGE/name).mkdir(exist_ok=True)
+    input_dir,output_dir=user_folders()
+    for folder in (input_dir,output_dir):folder.mkdir(parents=True,exist_ok=True)
     for name in ('logs','temp','userhome/AppData/Local','userhome/AppData/Roaming'):(SYSTEM/name).mkdir(parents=True,exist_ok=True)
     from opencc import OpenCC
     if OpenCC('s2tw').convert('汉字')!='漢字':raise RuntimeError('包內OpenCC驗證失敗。')
@@ -65,7 +75,7 @@ def prepare(args,say,services):
     model_manifest=json.loads((SYSTEM/'config/model-manifest.json').read_text(encoding='utf-8'))
     qwen=next(m for m in model_manifest['models'] if m['role']=='transcript_cleanup')
     if not any(m['name']==qwen['name'] and m['digest']==qwen['model_digest'] for m in tags['models']):raise RuntimeError('包內Qwen模型版本不符。')
-    config=dict(project_root=str(SYSTEM),workspace_dir=str(SYSTEM),desktop_input_dir=str(PACKAGE/'音檔'),desktop_output_dir=str(PACKAGE/'文字檔'),
+    config=dict(project_root=str(SYSTEM),workspace_dir=str(SYSTEM),desktop_input_dir=str(input_dir),desktop_output_dir=str(output_dir),
         desktop_outputs=['timeline','cleaned'],model_path=str(SYSTEM/'models/ggml-large-v3.bin'),vad_model_path=str(SYSTEM/'models/ggml-silero-v6.2.0.bin'),
         language=args.language,whisper_chunk_seconds=args.chunk_seconds,use_ollama_cleanup='false' if args.skip_cleanup else 'auto',
         ollama_model=qwen['name'],ollama_context_size=8192,ollama_chunk_chars=900,ollama_api_url=host+'/api/generate',isolated_ollama=True,
@@ -73,7 +83,7 @@ def prepare(args,say,services):
         ffmpeg_path=str(SYSTEM/'tools/ffmpeg/ffmpeg.exe'),whisper_cli_path=str(SYSTEM/'tools/whisper/whisper-cli.exe'),
         process_timeout_seconds=7200,process_idle_seconds=900,max_attempts=3,retry_backoff_seconds=30,disk_reserve_mb=256)
     if args.only_name:
-        matches=[p for p in (PACKAGE/'音檔').rglob('*') if p.is_file() and p.name==args.only_name]
+        matches=[p for p in input_dir.rglob('*') if p.is_file() and p.name==args.only_name]
         if len(matches)!=1:raise RuntimeError('指定檔名不唯一或不存在，請用視窗勾選。')
         config['selected_input_paths']=[str(matches[0])]
     atomic_write_text(SYSTEM/'config.local.json',json.dumps(config,ensure_ascii=False,indent=2))
@@ -82,14 +92,43 @@ def prepare(args,say,services):
     say('環境已就緒，模型不需下載；校稿服務會在需要時啟動。')
     return config
 
+def show_message(text,title='影音轉文字朋友版'):
+    """Visible dialog for the windowless pythonw entry; never exit without telling the user."""
+    import tkinter as tk
+    from tkinter import messagebox
+    root=tk.Tk();root.withdraw();root.attributes('-topmost',True)
+    messagebox.showinfo(title,text,parent=root);root.destroy()
+
+def already_running():
+    """Second double-click: bring the open window to the front and say so."""
+    import ctypes
+    from ctypes import wintypes
+    user=ctypes.windll.user32;found=[]
+    callback=ctypes.WINFUNCTYPE(wintypes.BOOL,wintypes.HWND,wintypes.LPARAM)
+    def visit(hwnd,_):
+        title=ctypes.create_unicode_buffer(256);user.GetWindowTextW(hwnd,title,256)
+        if user.IsWindowVisible(hwnd) and title.value.startswith('影音轉文字') and title.value!='影音轉文字朋友版 提示':found.append(hwnd)
+        return True
+    user.EnumWindows(callback(visit),0)
+    for hwnd in found:
+        user.ShowWindow(hwnd,9);user.SetForegroundWindow(hwnd)
+    show_message('影音轉文字已經開啟了，請使用已開啟的視窗（已幫你移到最前面；若沒看到，請看下方工作列）。\n要重新開啟，請先關閉那個視窗再雙擊「開始轉錄」。','影音轉文字朋友版 提示')
+    return 0
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--prepare-only',action='store_true');parser.add_argument('--once',action='store_true')
     parser.add_argument('--stable-minutes',type=float,default=3);parser.add_argument('--chunk-seconds',type=int,default=300)
     parser.add_argument('--only-name');parser.add_argument('--language',choices=['zh','en'],default='zh');parser.add_argument('--skip-cleanup',action='store_true')
     args=parser.parse_args();environment();services=[]
     from audio_review import check_lock
+    lock=check_lock(SYSTEM/'work/bootstrap_lock')
+    try:lock.__enter__()
+    except ValueError:
+        if args.prepare_only or args.once:raise RuntimeError('影音轉文字已經在執行中，請先關閉已開啟的視窗。')
+        return already_running()
     try:
-        with check_lock(SYSTEM/'work/bootstrap_lock'):
+        with contextlib.ExitStack() as held:
+            held.callback(lock.__exit__,None,None,None)
             if args.prepare_only or args.once:
                 config=prepare(args,lambda message:print(message,flush=True),services)
                 if args.prepare_only:return 0
@@ -99,6 +138,7 @@ def main():
             import tkinter as tk
             from tkinter import ttk
             window=tk.Tk();window.title('影音轉文字朋友版');window.geometry('720x280')
+            window.lift();window.attributes('-topmost',True);window.after(800,lambda:window.attributes('-topmost',False));window.focus_force()
             frame=ttk.Frame(window,padding=24);frame.pack(fill='both',expand=True)
             status=tk.StringVar(value='正在準備包內環境，請稍候。')
             ttk.Label(frame,text='影音轉文字｜完整離線朋友版',font=('Microsoft JhengHei',18)).pack(anchor='w',pady=12)
@@ -133,4 +173,7 @@ if __name__=='__main__':
     try:raise SystemExit(main())
     except Exception as error:
         if sys.stdout is not None:print('環境或轉錄未完成：'+str(error),flush=True)
+        else:
+            try:show_message('影音轉文字無法開啟：'+str(error)+'\n\n詳細紀錄在安裝資料夾的 system\\logs。')
+            except Exception:pass
         raise SystemExit(1)

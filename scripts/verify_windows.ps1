@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$Deep,
     [string]$ConfigPath
 )
@@ -58,12 +58,12 @@ foreach ($relative in @('scripts\run_transcribe.ps1','requirements.txt','config\
     if (Test-Path -LiteralPath $path) { Add-Check $relative 'PASS' $path } else { Add-Check $relative 'FAIL' '不存在' }
 }
 
-$desktopInput = Config-Value $config 'desktop_input_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '廣播音檔')
-$desktopOutput = Config-Value $config 'desktop_output_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '廣播文字檔')
+$desktopInput = Config-Value $config 'desktop_input_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '音檔')
+$desktopOutput = Config-Value $config 'desktop_output_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '文字檔')
 $desktopBat = Join-Path (Split-Path -Parent $desktopInput) '開始轉錄.bat'
 foreach ($entry in @(
-    @{Name='桌面 廣播音檔';Path=$desktopInput},
-    @{Name='桌面 廣播文字檔';Path=$desktopOutput},
+    @{Name='桌面 音檔';Path=$desktopInput},
+    @{Name='桌面 文字檔';Path=$desktopOutput},
     @{Name='桌面 開始轉錄.bat';Path=$desktopBat}
 )) {
     if (Test-Path -LiteralPath $entry.Path) { Add-Check $entry.Name 'PASS' $entry.Path } else { Add-Check $entry.Name 'FAIL' $entry.Path }

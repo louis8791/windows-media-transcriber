@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][string]$Base,
     [Parameter(Mandatory = $true)][string]$Start,
     [Parameter(Mandatory = $true)][string]$End,
@@ -321,7 +321,7 @@ try {
     if (-not $DeleteOnly) {
         # 2. 來源媒體：先找 input_audio，再找設定的 desktop_input_dir。
         $inputAudioDir = Join-Path $workspace 'input_audio'
-        $desktopInputDir = Get-RepairConfigValue 'desktop_input_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '廣播音檔')
+        $desktopInputDir = Get-RepairConfigValue 'desktop_input_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '音檔')
         $sourceMedia = $null
         foreach ($dir in @($inputAudioDir, $desktopInputDir)) {
             if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { continue }
@@ -509,7 +509,7 @@ try {
 
     # 12. 依 desktop_outputs 把新 SRT 複製到桌面；blocked 時審查報告一律不得無聲。
     #     桌面命名：timeline -> <Base>.txt（正式 SRT 的逐位元副本）、srt -> <Base>.srt。
-    $desktopOut = Get-RepairConfigValue 'desktop_output_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '廣播文字檔')
+    $desktopOut = Get-RepairConfigValue 'desktop_output_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '文字檔')
     $desktopOutputs = Get-DesktopOutputTokens
     $copiedToDesktop = $false
     if ($desktopOutputs -contains 'timeline') {

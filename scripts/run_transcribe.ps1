@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$Force,
     [switch]$Once,
     [switch]$RetryCleanup,
@@ -22,6 +22,7 @@ $script:MediaHashCache = @{}
 $script:ProcessedJobs = @{}
 $script:CleanupUnavailable = $null
 $script:SelectedInputPaths = @()
+$script:JobIdentityInputRoot = $null
 $script:BackupStamp = (Get-Date -Format 'yyyyMMdd_HHmmss') + '_' + [guid]::NewGuid().ToString('N').Substring(0,8)
 $runnerMutexName = 'Local\BroadcastTranscribeWindowsSingleRunner'
 if ($env:BROADCAST_PACKAGE_INSTANCE) { $runnerMutexName += '_' + $env:BROADCAST_PACKAGE_INSTANCE }
@@ -196,7 +197,13 @@ function Get-MediaBase {
 
 function Get-JobId {
     param([System.IO.FileInfo]$File)
-    $material = '{0}|{1}|{2}' -f $File.FullName, $File.Length, $File.LastWriteTimeUtc.Ticks
+    $identityPath = $File.FullName
+    if ($script:JobIdentityInputRoot) {
+        # Preserve existing checkpoint IDs after the input folder is renamed.
+        # This root is an identity namespace only; it is never read or created.
+        $identityPath = Join-Path $script:JobIdentityInputRoot ((Get-MediaBase $File) + $File.Extension)
+    }
+    $material = '{0}|{1}|{2}' -f $identityPath, $File.Length, $File.LastWriteTimeUtc.Ticks
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try { $hash = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($material)) }
     finally { $sha.Dispose() }
@@ -505,7 +512,7 @@ function Process-MediaFile {
     $rawDir = Join-Path $Workspace 'whisper_raw'
     $finalDir = Join-Path $Workspace 'output_final'
     $statusDir = Join-Path $Workspace 'logs\status'
-    $desktopOut = Get-ConfigValue $Config 'desktop_output_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '廣播文字檔')
+    $desktopOut = Get-ConfigValue $Config 'desktop_output_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '文字檔')
     $desktopOutputs = Get-DesktopOutputTokens $Config
     foreach ($dir in @($inputAudioDir,$workWavDir,$rawDir,$finalDir,$statusDir,$desktopOut)) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
@@ -836,8 +843,9 @@ try {
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
     $script:LogPath = Join-Path $logDir ('run_{0}.log' -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
 
-    $desktopInput = Get-ConfigValue $config 'desktop_input_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '廣播音檔')
-    $desktopOutput = Get-ConfigValue $config 'desktop_output_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '廣播文字檔')
+    $desktopInput = Get-ConfigValue $config 'desktop_input_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '音檔')
+    $desktopOutput = Get-ConfigValue $config 'desktop_output_dir' (Join-Path ([Environment]::GetFolderPath('Desktop')) '文字檔')
+    $script:JobIdentityInputRoot = Get-ConfigValue $config 'job_identity_input_root' $null
     $script:SelectedInputPaths = @(Get-ConfigValue $config 'selected_input_paths' @())
     foreach ($selectedPath in $script:SelectedInputPaths) {
         $inputPrefix = [IO.Path]::GetFullPath($desktopInput).TrimEnd('\') + '\'
@@ -901,7 +909,7 @@ try {
     do {
         $files = @(Get-MediaFiles $desktopInput)
         if ($files.Count -eq 0) {
-            Write-RunLog $(if ($OnlyName) { "找不到指定檔案：$OnlyName" } else { '請先把音檔或影片放到桌面「廣播音檔」資料夾。' })
+            Write-RunLog $(if ($OnlyName) { "找不到指定檔案：$OnlyName" } else { '請先把音檔或影片放到桌面「音檔」資料夾。' })
             if ($Once) { break }
             Start-Sleep -Seconds $PollSeconds
             continue
@@ -977,7 +985,7 @@ try {
         Start-Sleep -Seconds $PollSeconds
     } while ($true)
 
-    Write-RunLog '完成後請到上述「廣播文字檔」輸出資料夾查看結果。'
+    Write-RunLog '完成後請到上述「文字檔」輸出資料夾查看結果。'
     if ($script:HadFailures) { exit 1 }
 }
 catch {

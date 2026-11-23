@@ -1,4 +1,4 @@
-function Ensure-OllamaReady {
+﻿function Ensure-OllamaReady {
     param($Config, [int]$WaitSeconds = 30)
     $api = [uri](Get-ConfigValue $Config 'ollama_api_url' 'http://127.0.0.1:11434/api/generate')
     if (-not $api.IsLoopback -or $api.Scheme -ne 'http') {

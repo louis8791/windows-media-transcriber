@@ -26,16 +26,19 @@ def save_new(path, data):
     with path.open('x', encoding='utf-8') as stream:
         json.dump(data, stream, ensure_ascii=False, indent=2)
 
-def validate(data, complete=True):
+def validate(data, complete=True, allow_weak_training=False):
     records = data.get('records', [])
     if not records:
         raise ValueError('尚無教材')
-    ids, groups, languages = set(), {}, set()
+    ids, groups, speakers, languages = set(), {}, {}, set()
     for row in records:
         if row['id'] in ids:
             raise ValueError('教材 id 重複')
         ids.add(row['id'])
-        if row.get('approved') is not True or not row.get('verified_by', '').strip() or not row.get('verified_at', '').strip():
+        weak = (allow_weak_training and data.get('weak_supervision_authorized') is True
+                and row.get('split') == 'train' and row.get('annotation_type') == 'owner_authorized_asr_candidate'
+                and row.get('target_authorized_by') == 'Owner' and row.get('target_authorized_at'))
+        if not weak and (row.get('approved') is not True or not row.get('verified_by', '').strip() or not row.get('verified_at', '').strip()):
             raise ValueError('教材未經人工聽校，不可訓練')
         if not row.get('text', '').strip() or re.search(r'待確認|unclear|原文不清|/no_think', row['text'], re.I):
             raise ValueError('教材仍有不確定內容')
@@ -56,6 +59,10 @@ def validate(data, complete=True):
         group = groups.setdefault(row['source_sha256'], row['split'])
         if group != row['split']:
             raise ValueError('同一錄音不可跨訓練、驗證與考試，避免洩漏')
+        if row.get('speaker_id'):
+            previous = speakers.setdefault(row['speaker_id'], row['split'])
+            if previous != row['split']:
+                raise ValueError('同一講者不可跨訓練、驗證與考試')
     if complete and {r['split'] for r in records} != {'train', 'validation', 'test'}:
         raise ValueError('缺少獨立錄音的 train／validation／test 教材')
     if complete:
@@ -99,8 +106,59 @@ def errors(reference, hypothesis):
         previous = current
     return previous[-1], len(a)
 
-def compare(data, baseline, candidate):
-    records = [r for r in validate(data) if r['split'] == 'test']
+def score_predictions(records, predictions):
+    """Score one frozen split, including omissions and speaker regressions."""
+    from inspect_whisper_error_changes import edits
+    if set(predictions) != {r['id'] for r in records}:
+        raise ValueError('評分結果 id 必須完整對應指定教材')
+    totals = {'errors': 0, 'reference_tokens': 0, 'substitutions': 0, 'deletions': 0, 'insertions': 0}
+    speakers = {}
+    languages = {}
+    for row in records:
+        count, length = errors(row['text'], predictions[row['id']])
+        if not length:
+            raise ValueError('答案沒有可評分文字')
+        totals['errors'] += count
+        totals['reference_tokens'] += length
+        for key, value in edits(row['text'], predictions[row['id']]).items():
+            totals[key] += value
+        for groups, ident in ((speakers, row.get('speaker_id', 'unspecified')), (languages, row['language'])):
+            group = groups.setdefault(ident, {'errors': 0, 'reference_tokens': 0})
+            group['errors'] += count
+            group['reference_tokens'] += length
+    totals['error_rate'] = totals['errors']/totals['reference_tokens']
+    return {**totals, 'speakers': speakers, 'languages': languages}
+
+def acceptable_score(baseline, candidate):
+    return (candidate['errors'] < baseline['errors']
+            and candidate['deletions'] <= baseline['deletions']
+            and candidate['insertions'] <= baseline['insertions']
+            and all(candidate[group][key]['errors'] <= value['errors']
+                    for group in ('speakers', 'languages') for key, value in baseline[group].items()))
+
+class ValidationProgress:
+    """Stop after two regressions or three checks without beating the best WER."""
+    def __init__(self, baseline):
+        self.baseline = baseline
+        self.best = baseline['error_rate']
+        self.regressions = self.stale = 0
+        self.reason = None
+
+    def observe(self, candidate):
+        self.regressions = self.regressions + 1 if candidate['errors'] > self.baseline['errors'] else 0
+        if candidate['error_rate'] < self.best:
+            self.best = candidate['error_rate']
+            self.stale = 0
+        else:
+            self.stale += 1
+        if self.regressions >= 2:
+            self.reason = 'two_consecutive_validation_regressions'
+        elif self.stale >= 3:
+            self.reason = 'three_checks_without_validation_improvement'
+        return self.reason
+
+def compare(data, baseline, candidate, allow_weak_training=False):
+    records = [r for r in validate(data, allow_weak_training=allow_weak_training) if r['split'] == 'test']
     expected = {r['id'] for r in records}
     if set(baseline) != expected or set(candidate) != expected:
         raise ValueError('考試結果 id 必須完整對應同一組未見教材')
@@ -114,13 +172,15 @@ def compare(data, baseline, candidate):
     total = sum(r['reference_tokens'] for r in rows)
     old = sum(r['baseline_errors'] for r in rows)
     new = sum(r['candidate_errors'] for r in rows)
-    passed = new < old and all(sum(r['candidate_errors'] for r in rows if r['language']==lang) <= sum(r['baseline_errors'] for r in rows if r['language']==lang) for lang in {r['language'] for r in rows})
-    return {'status': 'candidate_improved' if passed else 'not_accepted', 'baseline_error_rate': old/total, 'candidate_error_rate': new/total, 'normalization': 'casefold English words and individual Chinese characters; punctuation ignored', 'rows': rows, 'human_names_numbers_negations_review_required': True, 'production_promoted': False}
+    old_score = score_predictions(records, baseline)
+    new_score = score_predictions(records, candidate)
+    passed = acceptable_score(old_score, new_score)
+    return {'status': 'candidate_improved' if passed else 'not_accepted', 'baseline_error_rate': old/total, 'candidate_error_rate': new/total, 'baseline_score': old_score, 'candidate_score': new_score, 'normalization': 'casefold English words and individual Chinese characters; punctuation ignored', 'rows': rows, 'human_names_numbers_negations_review_required': True, 'production_promoted': False}
 
-def preflight(data, model_path):
+def preflight(data, model_path, allow_weak_training=False):
     reasons = []
     try:
-        rows = validate(data)
+        rows = validate(data, allow_weak_training=allow_weak_training)
     except (ValueError, KeyError, OSError, wave.Error) as error:
         rows = []; reasons.append(str(error))
     model = Path(model_path).resolve()
@@ -137,7 +197,9 @@ def preflight(data, model_path):
     for name in ('torch', 'transformers', 'accelerate', 'numpy'):
         if importlib.util.find_spec(name) is None:
             reasons.append('缺少訓練依賴：'+name)
-    return {'ready': not reasons, 'reasons': reasons, 'approved_records': len(rows), 'training_started': False, 'production_model_changed': False}
+    return {'ready': not reasons, 'reasons': reasons, 'approved_records': sum(r.get('approved') is True for r in rows),
+            'weak_training_records': sum(r.get('annotation_type') == 'owner_authorized_asr_candidate' for r in rows),
+            'training_started': False, 'production_model_changed': False}
 
 def main():
     parser = argparse.ArgumentParser()
